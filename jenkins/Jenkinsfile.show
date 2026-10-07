@@ -1,0 +1,19 @@
+// policy/show - list the profiles, or show the policy of one project.
+pipeline {
+    agent { label 'gitpolicy' }
+    options { timestamps(); buildDiscarder(logRotator(numToKeepStr: '50')) }
+    stages {
+        stage('Show') {
+            steps {
+                dir('cfg') {
+                    checkout scmGit(branches: [[name: "*/${env.GP_BRANCH}"]],
+                                    userRemoteConfigs: [[url: env.GP_CONFIG_REPO, credentialsId: env.GP_GIT_CRED]])
+                }
+                sh '''
+                    if [ -n "$PROJECT" ]; then python3 -m gitpolicy show cfg --project "$PROJECT"
+                    else python3 -m gitpolicy show cfg; echo; python3 -m gitpolicy describe-rules; fi
+                '''
+            }
+        }
+    }
+}

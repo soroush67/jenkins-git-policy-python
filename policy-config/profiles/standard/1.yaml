@@ -1,0 +1,34 @@
+name: standard
+version: 1
+owner: platform-team
+description: |
+  Recommended default for application repositories: no binaries, no secrets,
+  no history rewrite or deletion of main/release branches.
+rules:
+  - id: no-binary-files
+    type: binary_files
+
+  - id: no-binary-extensions
+    type: forbidden_extensions
+    extensions: [.exe, .dll, .so, .jar, .war, .class, .zip, .tar, .gz, .7z, .rar]
+
+  - id: max-10mb
+    type: max_file_size
+    max_size: 10MB
+
+  - id: no-secrets
+    type: secret_patterns
+    message: Rotate the leaked credential, then remove it from the history.
+
+  - id: no-env-files
+    type: forbidden_paths
+    patterns: [".env", ".env.*", "*.pem", "*.key", "id_rsa*"]
+    allow_paths: [".env.example"]
+
+  - id: no-force-push-protected
+    type: no_force_push
+    branches: [main, master, "release/*"]
+
+  - id: keep-main
+    type: no_branch_delete
+    branches: [main, master, "release/*"]

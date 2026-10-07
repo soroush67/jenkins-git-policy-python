@@ -1,0 +1,65 @@
+# Local lab for gitpolicy: GitLab CE + Jenkins. Secrets live in .env and
+# secrets/ (created by up.sh, git-ignored). Names and ports differ from the
+# other labs on this machine so they can run side by side.
+name: gitpolicy-py-lab
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:17.10.5-ce.0
+    container_name: gpp-gitlab
+    hostname: gpp-gitlab
+    restart: unless-stopped
+    shm_size: 256m
+    ports:
+      - "8940:80"
+    environment:
+      GITLAB_ROOT_PASSWORD: ${GITLAB_ROOT_PASSWORD:?run up.sh}
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8940'
+        nginx['listen_port'] = 80
+        gitlab_rails['initial_root_password'] = ENV['GITLAB_ROOT_PASSWORD']
+        gitlab_rails['usage_ping_enabled'] = false
+        puma['worker_processes'] = 0
+        sidekiq['concurrency'] = 5
+        prometheus_monitoring['enable'] = false
+        # global server hooks (gitpolicy installs pre-receive.d/50-gitpolicy here)
+        gitaly['configuration'] = { hooks: { custom_hooks_dir: '/var/opt/gitlab/gitaly/custom_hooks' } }
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/-/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+  jenkins:
+    build:
+      context: ./jenkins
+      args:
+        JENKINS_IMAGE: ${JENKINS_BASE_IMAGE:-jenkins/jenkins:lts-jdk17}
+    container_name: gpp-jenkins
+    hostname: gpp-jenkins
+    restart: unless-stopped
+    ports:
+      - "8096:8080"
+    environment:
+      CASC_JENKINS_CONFIG: /usr/share/jenkins/ref/casc.yaml
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false
+    env_file: ./secrets/jenkins.env
+    # Lab transport GP_TARGET=docker:gpp-gitlab needs the docker socket.
+    # Production uses ssh: / ssh-docker: instead (see docs/fa/INSTALL-FA.md).
+    group_add:
+      - "${DOCKER_GID:?run up.sh}"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - ./secrets/gitlab-bot-token:/run/secrets/gitlab-bot-token:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  jenkins-home:

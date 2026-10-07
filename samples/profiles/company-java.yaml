@@ -1,0 +1,36 @@
+# Sample: a profile for Java services. Copy to
+#   policy-config/profiles/company-java/1.yaml
+# and push to the policy repository.
+name: company-java
+version: 1
+owner: backend-team
+description: |
+  Java services: no build outputs (jar/class/war), no binaries except the
+  Maven/Gradle wrapper jar, company e-mail addresses only, secrets blocked.
+rules:
+  - id: no-build-outputs
+    type: forbidden_extensions
+    extensions: [.jar, .war, .ear, .class]
+    allow_paths: [".mvn/wrapper/maven-wrapper.jar", "gradle/wrapper/gradle-wrapper.jar"]
+    message: Build artefacts belong in Nexus. Run mvn deploy instead of committing them.
+
+  - id: no-binaries
+    type: binary_files
+    allow_paths: [".mvn/wrapper/*.jar", "gradle/wrapper/*.jar", "src/main/resources/static/**"]
+
+  - id: company-mail
+    type: author_email
+    pattern: '@(company\.com|company\.ir)$'
+    message: Set your work e-mail - git config user.email you@company.com
+
+  - id: no-secrets
+    type: secret_patterns
+    patterns:
+      jdbc-password: 'jdbc:[a-z]+://[^\s]*password=[^\s&;]+'
+
+  - id: jira-key
+    type: commit_message
+    pattern: '^[A-Z][A-Z0-9]+-[0-9]+ '
+    branches: [main, "release/*"]
+    action: warn
+    message: Start commit messages with the Jira key, e.g. "PAY-123 fix rounding".

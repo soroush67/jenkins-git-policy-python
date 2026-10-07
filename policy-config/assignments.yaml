@@ -1,0 +1,8 @@
+# GitLab project -> policy profile (name@version).
+# Managed by the Jenkins job policy/load-profile: every change is a commit by
+# the Jenkins user who loaded the profile. Admins may also edit this file by
+# hand (via merge request); project patterns such as "demo/*" are allowed.
+
+platform/policy-config:
+  profile: policy-config-guard@1
+  by: admin

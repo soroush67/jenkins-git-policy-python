@@ -1,0 +1,18 @@
+name: no-binaries
+version: 1
+owner: platform-team
+description: |
+  No binary files on any branch. Blocks executables, archives, images and any
+  other file git considers binary, plus files larger than 10 MB.
+rules:
+  - id: no-binary-files
+    type: binary_files
+    message: Store build outputs and binaries in Nexus/Artifactory, not in Git.
+
+  - id: no-binary-extensions
+    type: forbidden_extensions
+    extensions: [.exe, .dll, .so, .dylib, .jar, .war, .class, .bin, .zip, .tar, .gz, .7z, .rar, .iso]
+
+  - id: max-10mb
+    type: max_file_size
+    max_size: 10MB

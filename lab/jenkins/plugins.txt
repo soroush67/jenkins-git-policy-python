@@ -1,0 +1,11 @@
+configuration-as-code
+workflow-aggregator
+pipeline-stage-view
+git
+credentials
+credentials-binding
+job-dsl
+cloudbees-folder
+role-strategy
+lockable-resources
+timestamper

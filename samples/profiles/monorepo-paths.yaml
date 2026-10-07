@@ -1,0 +1,19 @@
+# Sample: path rules for a monorepo - vendored code and generated files are
+# read-only, nothing may be added under build/ or dist/.
+name: monorepo-paths
+version: 1
+owner: platform-team
+description: Monorepo hygiene - no build output, vendored third_party is read-only.
+rules:
+  - id: no-build-dirs
+    type: forbidden_paths
+    patterns: ["build/", "dist/", "node_modules/", "*.log"]
+
+  - id: third-party-frozen
+    type: immutable_paths
+    patterns: ["third_party/**"]
+    message: third_party is updated by the platform team only (open a ticket).
+
+  - id: max-2mb
+    type: max_file_size
+    max_size: 2MB

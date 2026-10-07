@@ -1,0 +1,39 @@
+// policy-admin/unload-profile - admin only: remove a project's profile.
+pipeline {
+    agent { label 'gitpolicy' }
+    options { timestamps() }
+    stages {
+        stage('Commit') {
+            steps {
+                script {
+                    def causes = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                    env.REQ_USER = causes ? causes[0].userId : 'unknown'
+                }
+                lock('gitpolicy-config') {
+                    withCredentials([usernamePassword(credentialsId: env.GP_GIT_CRED, usernameVariable: 'GL_USER', passwordVariable: 'GL_TOKEN')]) {
+                        sh '''
+                            set -e
+                            rm -rf cfg
+                            url=$(echo "$GP_CONFIG_REPO" | sed "s#://#://$GL_USER:$GL_TOKEN@#")
+                            git clone -q --branch "$GP_BRANCH" "$url" cfg
+                            python3 -m gitpolicy unassign cfg --project "$PROJECT"
+                            git -C cfg add assignments.yaml
+                            if git -C cfg -c user.name="$REQ_USER (via Jenkins)" -c user.email="$REQ_USER@jenkins.local" \
+                                   commit -q -m "unload profile for $PROJECT" -m "Requested by $REQ_USER in $BUILD_URL"; then
+                                git -C cfg push -q origin "HEAD:$GP_BRANCH"
+                                echo changed > status.txt
+                            else
+                                echo unchanged > status.txt
+                            fi
+                        '''
+                    }
+                }
+                script {
+                    if (readFile('status.txt').trim() == 'changed') {
+                        build job: '/policy-admin/deploy', wait: true, propagate: true
+                    }
+                }
+            }
+        }
+    }
+}

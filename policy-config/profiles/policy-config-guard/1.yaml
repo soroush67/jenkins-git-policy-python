@@ -1,0 +1,22 @@
+name: policy-config-guard
+version: 1
+owner: platform-team
+description: |
+  Protects the policy repository itself: a published profile file can never
+  be modified, renamed or deleted (only new versions can be added).
+rules:
+  - id: profiles-are-immutable
+    type: immutable_paths
+    patterns: ["profiles/**"]
+    message: Published profile versions are immutable - add profiles/<name>/<next-version>.yaml instead.
+
+  - id: no-binary-files
+    type: binary_files
+
+  - id: no-force-push
+    type: no_force_push
+    branches: ["*"]
+
+  - id: keep-main
+    type: no_branch_delete
+    branches: [main]

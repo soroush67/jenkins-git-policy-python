@@ -1,0 +1,19 @@
+name: no-binaries
+version: 2
+owner: platform-team
+description: |
+  Like no-binaries@1, but images under docs/ are allowed (documentation
+  screenshots) and the size limit is 20 MB.
+rules:
+  - id: no-binary-files
+    type: binary_files
+    allow_paths: ["docs/**/*.png", "docs/**/*.jpg", "docs/**/*.svg"]
+    message: Store build outputs and binaries in Nexus/Artifactory, not in Git.
+
+  - id: no-binary-extensions
+    type: forbidden_extensions
+    extensions: [.exe, .dll, .so, .dylib, .jar, .war, .class, .bin, .zip, .tar, .gz, .7z, .rar, .iso]
+
+  - id: max-20mb
+    type: max_file_size
+    max_size: 20MB

@@ -1,0 +1,102 @@
+# Jenkins configuration as code (lab). Passwords/tokens come from the
+# environment (secrets/jenkins.env) and /run/secrets, never from this file.
+jenkins:
+  systemMessage: "gitpolicy (lab) - organisation Git policy profiles for GitLab"
+  numExecutors: 4
+  # Pipelines run on nodes labelled `gitpolicy` (python3 + PyYAML + git +
+  # docker/ssh client). In the lab that is the built-in node.
+  labelString: "gitpolicy"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          name: "Platform Admin"
+          password: ${JENKINS_ADMIN_PASSWORD}
+        - id: dev1
+          name: "Developer One"
+          password: ${DEV1_PASSWORD}
+        - id: dev2
+          name: "Developer Two"
+          password: ${DEV2_PASSWORD}
+  # Users see and build only the jobs in the `policy` folder.
+  authorizationStrategy:
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            permissions:
+              - "Overall/Administer"
+            entries:
+              - user: "admin"
+          - name: "authenticated-read"
+            permissions:
+              - "Overall/Read"
+            entries:
+              - group: "authenticated"
+        items:
+          - name: "policy-user"
+            pattern: "policy(/.*)?"
+            permissions:
+              - "Job/Read"
+              - "Job/Build"
+            entries:
+              - group: "authenticated"
+  globalNodeProperties:
+    - envVars:
+        env:
+          - {key: GP_TOOL_REPO, value: "http://gpp-gitlab/platform/git-policy.git"}
+          - {key: GP_CONFIG_REPO, value: "http://gpp-gitlab/platform/policy-config.git"}
+          - {key: GP_BRANCH, value: "main"}
+          - {key: GP_GIT_CRED, value: "gitlab-bot"}
+          - {key: GP_TARGET, value: "docker:gpp-gitlab"}
+          - {key: GP_REQUIRE_ROLE, value: "maintainer"}
+          - {key: GITLAB_URL, value: "http://gpp-gitlab"}
+
+security:
+  # jobs.groovy comes from the admin-owned platform/git-policy repository
+  # and only the admin deploy job runs it.
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: gitlab-bot
+              description: "GitLab bot: read platform/git-policy, push platform/policy-config, read_api"
+              username: jenkins-bot
+              password: ${readFile:/run/secrets/gitlab-bot-token}
+
+unclassified:
+  location:
+    url: http://localhost:8096/
+
+jobs:
+  # Only the admin deploy job is created here; it generates the user jobs
+  # (policy/load-profile, policy/show) with the current profile list.
+  - script: |
+      folder('policy-admin') {
+        displayName('Git Policy - admin')
+        description('Admin only - not visible to users.')
+      }
+      pipelineJob('policy-admin/deploy') {
+        description('GitOps: validate + compile platform/policy-config and install it on GitLab. Runs on every change of policy-config.')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('http://gpp-gitlab/platform/git-policy.git')
+                  credentials('gitlab-bot')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('jenkins/Jenkinsfile.deploy')
+            lightweight(true)
+          }
+        }
+      }

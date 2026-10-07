@@ -1,0 +1,45 @@
+name: strict
+version: 1
+owner: platform-team
+description: |
+  standard@1 plus Conventional Commit messages and branch naming. Large
+  files only produce a warning on feature branches.
+rules:
+  - id: no-binary-files
+    type: binary_files
+
+  - id: no-binary-extensions
+    type: forbidden_extensions
+    extensions: [.exe, .dll, .so, .jar, .war, .class, .zip, .tar, .gz, .7z, .rar]
+
+  - id: max-5mb-protected
+    type: max_file_size
+    max_size: 5MB
+    branches: [main, "release/*"]
+
+  - id: big-file-warning
+    type: max_file_size
+    max_size: 1MB
+    action: warn
+    branches: ["feature/*", "fix/*"]
+
+  - id: no-secrets
+    type: secret_patterns
+
+  - id: conventional-commits
+    type: commit_message
+    pattern: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .{3,}'
+    message: 'Use Conventional Commits, e.g. "feat(api): add login endpoint".'
+
+  - id: branch-naming
+    type: branch_name
+    pattern: '^(main|develop|release/[0-9]+\.[0-9]+|(feature|fix|hotfix|chore)/[a-z0-9._-]+)$'
+    message: 'Name branches feature/<name>, fix/<name>, hotfix/<name>, chore/<name> or release/<x.y>.'
+
+  - id: no-force-push
+    type: no_force_push
+    branches: [main, develop, "release/*"]
+
+  - id: keep-main
+    type: no_branch_delete
+    branches: [main, develop, "release/*"]

@@ -1,0 +1,23 @@
+# Global settings of the policy engine (applies to every profile).
+
+# What the hook does if the bundle is broken or the engine crashes:
+#   closed = reject the push (safe default), open = allow it.
+fail_mode: closed
+
+# GitLab usernames whose pushes skip every policy (emergency only - each
+# bypass is written to the audit log and printed to the pusher).
+break_glass_users: []
+
+# Projects whose profile cannot be changed from the Jenkins job
+# policy/load-profile (only by an admin editing assignments.yaml).
+locked_projects:
+  - platform/*
+
+# Profile versions that may no longer be loaded (projects already using
+# them keep working). Published profile files are immutable, so this is the
+# way to retire a version.
+deprecated_profiles: []
+
+# Pushes with more new commits than this are checked as one tree diff
+# (content rules only) instead of commit by commit.
+max_commits: 10000

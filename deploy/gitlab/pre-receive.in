@@ -1,0 +1,9 @@
+#!/bin/sh
+# gitpolicy global pre-receive hook (installed by deploy/push.sh install-code).
+# Gitaly runs every executable in custom_hooks/pre-receive.d for every push,
+# web edit and merge request merge. The policy itself is in @ETC@/bundle.json.
+GITPOLICY_BUNDLE=@ETC@/bundle.json
+GITPOLICY_AUDIT_LOG=@LOG@/audit.log
+export GITPOLICY_BUNDLE GITPOLICY_AUDIT_LOG
+# -E: ignore PYTHON* environment variables; the package path is fixed here.
+exec @PYTHON@ -E -s -c 'import sys; sys.path.insert(0, "@HOME@"); from gitpolicy.hook import main; sys.exit(main())'

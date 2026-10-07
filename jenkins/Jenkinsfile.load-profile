@@ -1,0 +1,72 @@
+// policy/load-profile - a user loads one of the published profiles for a
+// GitLab project. The change is a commit in policy-config (GitOps); the
+// deploy job then puts it live. Users can't edit profiles, only pick one.
+pipeline {
+    agent { label 'gitpolicy' }
+    options { timestamps(); buildDiscarder(logRotator(numToKeepStr: '200')) }
+    // parameters PROJECT, PROFILE, REPLACE_EXISTING are defined by jobs.groovy
+    stages {
+        stage('Check request') {
+            steps {
+                script {
+                    def causes = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                    env.REQ_USER = causes ? causes[0].userId : 'unknown'
+                    currentBuild.description = "${params.PROJECT} -> ${params.PROFILE} (by ${env.REQ_USER})"
+                }
+                withCredentials([usernamePassword(credentialsId: env.GP_GIT_CRED, usernameVariable: 'GL_USER', passwordVariable: 'GITLAB_TOKEN')]) {
+                    sh '''
+                        set -e
+                        [ "$REQ_USER" != unknown ] || { echo "ERROR: only a logged-in user can load a profile"; exit 1; }
+                        # project must exist; the user must be maintainer of it (GP_REQUIRE_ROLE)
+                        python3 -m gitpolicy gitlab-check --project "$PROJECT" --user "$REQ_USER" \
+                            --min-level "${GP_REQUIRE_ROLE:-maintainer}" > canonical.txt
+                        echo "GitLab project: $(cat canonical.txt) - $REQ_USER has the required role (${GP_REQUIRE_ROLE:-maintainer})"
+                    '''
+                }
+            }
+        }
+        stage('Commit assignment') {
+            steps {
+                lock('gitpolicy-config') {
+                    withCredentials([usernamePassword(credentialsId: env.GP_GIT_CRED, usernameVariable: 'GL_USER', passwordVariable: 'GL_TOKEN')]) {
+                        sh '''
+                            set -e
+                            rm -rf cfg
+                            url=$(echo "$GP_CONFIG_REPO" | sed "s#://#://$GL_USER:$GL_TOKEN@#")
+                            for attempt in 1 2 3; do
+                                rm -rf cfg
+                                git clone -q --branch "$GP_BRANCH" "$url" cfg
+                                replace=""; [ "$REPLACE_EXISTING" = true ] && replace=--replace
+                                python3 -m gitpolicy assign cfg --project "$(cat canonical.txt)" --profile "$PROFILE" \
+                                    --by "$REQ_USER" $replace --status-file status.txt
+                                [ "$(cat status.txt)" = unchanged ] && { echo "nothing to commit"; exit 0; }
+                                python3 -m gitpolicy validate cfg
+                                git -C cfg add assignments.yaml
+                                git -C cfg -c user.name="$REQ_USER (via Jenkins)" -c user.email="$REQ_USER@jenkins.local" \
+                                    commit -q -m "load profile $PROFILE for $(cat canonical.txt)" \
+                                    -m "Requested by $REQ_USER in $BUILD_URL"
+                                if git -C cfg push -q origin "HEAD:$GP_BRANCH"; then
+                                    echo "committed $(git -C cfg rev-parse --short HEAD) to policy-config"; exit 0
+                                fi
+                                echo "push failed (attempt $attempt) - someone else changed policy-config, retrying"; sleep 3
+                            done
+                            exit 1
+                        '''
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    if (readFile('status.txt').trim() != 'unchanged') {
+                        build job: '/policy-admin/deploy', wait: true, propagate: true
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success { echo "Profile ${params.PROFILE} is active for ${params.PROJECT}. Pushes and merges are checked from now on." }
+    }
+}

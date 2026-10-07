@@ -1,0 +1,19 @@
+name: docs-friendly
+version: 1
+owner: platform-team
+description: |
+  For documentation repositories: images and PDFs are allowed under assets/,
+  every other binary is blocked. Shows allow_paths / allow_extensions.
+rules:
+  - id: binaries-only-in-assets
+    type: binary_files
+    allow_paths: ["assets/**"]
+    allow_extensions: [.png, .jpg, .jpeg, .gif, .svg, .pdf]
+
+  - id: no-executables
+    type: forbidden_extensions
+    extensions: [.exe, .dll, .so, .msi, .bat, .cmd, .ps1]
+
+  - id: max-25mb
+    type: max_file_size
+    max_size: 25MB

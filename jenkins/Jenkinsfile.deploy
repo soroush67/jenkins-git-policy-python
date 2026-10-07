@@ -1,0 +1,80 @@
+// policy-admin/deploy - GitOps reconciler.
+// Source of truth: the policy-config repository (GP_CONFIG_REPO). Runs when
+// it changes (SCM polling), when policy/load-profile commits an assignment,
+// or by hand. Validates, compiles, installs on GitLab, regenerates the user
+// jobs. Never activates a bundle that changes a published profile version.
+//
+// Node environment (JCasC globalNodeProperties or agent env):
+//   GP_TOOL_REPO / GP_CONFIG_REPO / GP_BRANCH   git URLs + branch
+//   GP_GIT_CRED     Jenkins credential id (username + token) for GitLab
+//   GP_TARGET       deploy/push.sh transport, e.g. docker:gpp-gitlab
+pipeline {
+    agent { label 'gitpolicy' }
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+    }
+    triggers { pollSCM('H/2 * * * *') }
+    stages {
+        stage('Checkout') {
+            steps {
+                dir('cfg') {
+                    checkout scmGit(branches: [[name: "*/${env.GP_BRANCH}"]],
+                                    userRemoteConfigs: [[url: env.GP_CONFIG_REPO, credentialsId: env.GP_GIT_CRED]])
+                }
+                sh 'echo "engine: $(git rev-parse --short HEAD)  policy-config: $(git -C cfg rev-parse --short HEAD)"'
+            }
+        }
+        stage('Unit tests') {
+            steps { sh 'python3 -m pytest -q -p no:cacheprovider tests' }
+        }
+        stage('Validate') {
+            steps {
+                sh '''
+                    set -e
+                    deploy/push.sh fetch-bundle installed.json
+                    if [ -s installed.json ]; then
+                        echo "installed bundle: source $(python3 -c "import json;print(json.load(open('installed.json')).get('source_commit','')[:12])")"
+                    else
+                        echo "no bundle installed yet (first deploy)"
+                    fi
+                    # 1) immutability against the installed bundle (authoritative)
+                    # 2) the same rule against git history since the last deploy
+                    base=$(python3 -c "import json,sys;print(json.load(open('installed.json')).get('source_commit',''))" 2>/dev/null || true)
+                    gitbase=""
+                    if [ -n "$base" ] && git -C cfg cat-file -e "$base^{commit}" 2>/dev/null; then gitbase="--git-base $base"; fi
+                    python3 -m gitpolicy validate cfg --previous installed.json $gitbase
+                    python3 -m gitpolicy compile cfg -o bundle.json --previous installed.json \
+                        --source-commit "$(git -C cfg rev-parse HEAD)"
+                '''
+            }
+        }
+        stage('Deploy to GitLab') {
+            steps {
+                lock('gitpolicy-deploy') {
+                    sh '''
+                        set -e
+                        deploy/push.sh install-code
+                        deploy/push.sh install-bundle bundle.json
+                        deploy/push.sh doctor
+                    '''
+                }
+            }
+        }
+        stage('Refresh user jobs') {
+            steps {
+                sh 'python3 -m gitpolicy list-profiles cfg --loadable > profiles.txt && cat profiles.txt'
+                jobDsl(scriptText: readFile('jenkins/jobs.groovy'),
+                       additionalParameters: [PROFILES: readFile('profiles.txt').trim(),
+                                              TOOL_REPO: env.GP_TOOL_REPO, BRANCH: env.GP_BRANCH,
+                                              GIT_CRED: env.GP_GIT_CRED],
+                       removedJobAction: 'IGNORE', removedViewAction: 'IGNORE')
+            }
+        }
+    }
+    post {
+        always { archiveArtifacts artifacts: 'bundle.json,profiles.txt', allowEmptyArchive: true }
+        success { sh 'python3 -m gitpolicy show cfg' }
+    }
+}
